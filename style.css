@@ -1163,6 +1163,8 @@ input:checked + .slider:before {
 @media (max-width: 768px) {
   #hud {
     padding: 12px;
+    padding-top: calc(12px + env(safe-area-inset-top));
+    padding-bottom: calc(12px + env(safe-area-inset-bottom));
   }
 
   .hud-top-bar {
@@ -1186,9 +1188,10 @@ input:checked + .slider:before {
     font-size: 0.95rem;
   }
 
+  /* GPS Dashboard: position at bottom, full width on mobile */
   #gps-dashboard {
     top: auto;
-    bottom: 15px;
+    bottom: calc(15px + env(safe-area-inset-bottom));
     left: 15px;
     right: 15px;
     width: calc(100% - 30px);
@@ -1196,17 +1199,37 @@ input:checked + .slider:before {
     overflow-y: auto;
   }
 
+  /* When collapsed on mobile, hide the entire dashboard */
+  #gps-dashboard.collapsed {
+    display: none;
+  }
+
+  /* Joystick: push well above the browser chrome */
+  #joystick-container {
+    bottom: calc(30px + env(safe-area-inset-bottom));
+    left: calc(15px + env(safe-area-inset-left));
+    width: 110px;
+    height: 110px;
+  }
+
+  #joystick-knob {
+    width: 50px;
+    height: 50px;
+  }
+
+  /* Honk button: push above browser chrome */
   #honk-btn {
-    bottom: 160px;
-    right: 15px;
+    bottom: calc(30px + env(safe-area-inset-bottom));
+    right: calc(15px + env(safe-area-inset-right));
     width: 70px;
     height: 70px;
     font-size: 1rem;
   }
 
+  /* Camera controls: push above browser chrome */
   #camera-controls-container {
-    bottom: 160px;
-    right: 95px;
+    bottom: calc(30px + env(safe-area-inset-bottom));
+    right: calc(95px + env(safe-area-inset-right));
     gap: 6px;
   }
 
@@ -1214,4 +1237,28 @@ input:checked + .slider:before {
     font-size: 0.85rem;
     padding: 8px 12px;
   }
+}
+
+/* GPS Toggle Button (visible in HUD to reopen the GPS panel) */
+#gps-toggle-btn {
+  font-family: var(--font-family);
+  font-weight: 700;
+  font-size: 1.2rem;
+  color: white;
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+  border: 3.5px solid white;
+  border-radius: 30px;
+  padding: 10px 22px;
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  transition: transform 0.2s;
+  display: none;
+}
+
+#gps-toggle-btn:hover {
+  transform: scale(1.08);
+}
+
+#gps-toggle-btn:active {
+  transform: scale(0.95);
 }

@@ -19,3 +19,20 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+
+### Third-Party Components & Attributions
+
+This project utilizes the following open-source software and services:
+
+1. **Leaflet.js**
+   - License: BSD 2-Clause License
+   - Copyright (c) 2010-2023, Volodymyr Agafonkin; 2010-2011, CloudMade
+   - Website: https://leafletjs.com/
+
+2. **Map Tiles (CartoDB / CARTO)**
+   - Tile Style: Dark Matter / Positron
+   - License: Creative Commons Attribution 3.0 (CC BY 3.0)
+   - Map data by OpenStreetMap, under ODbL.
+   - Website: https://carto.com/

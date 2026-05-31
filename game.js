@@ -848,9 +848,20 @@ window.addEventListener('load', () => {
     Puzzles.playRewardSound(true);
   });
 
+  const gpsToggleBtn = document.getElementById('gps-toggle-btn');
+
   dashboardToggle.addEventListener('click', () => {
     gpsDashboard.classList.toggle('collapsed');
-    dashboardToggle.textContent = gpsDashboard.classList.contains('collapsed') ? "▲ Show Panel" : "▼ Hide Panel";
+    const isCollapsed = gpsDashboard.classList.contains('collapsed');
+    dashboardToggle.textContent = isCollapsed ? "▲ Show Panel" : "▼ Hide Panel";
+    gpsToggleBtn.style.display = isCollapsed ? "block" : "none";
+  });
+
+  gpsToggleBtn.addEventListener('click', () => {
+    gpsDashboard.classList.remove('collapsed');
+    dashboardToggle.textContent = "▼ Hide Panel";
+    gpsToggleBtn.style.display = "none";
+    Puzzles.playRewardSound(true);
   });
 
   calculateBtn.addEventListener('click', calculateCustomRoute);
