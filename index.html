@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="description" content="Map Explorer - A top-down virtual road trip driving game, designed to teach colors, numbers, shapes, and NKJV Bible scriptures while driving around real-world roads.">
+  
+  <!-- PWA & Mobile Web App Meta Tags -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Map Explorer">
+  <meta name="mobile-web-app-capable" content="yes">
+  
+  <title>Map Explorer - Virtual GPS Road Trip & Scripture Quest</title>
+  
+  <!-- Leaflet CSS for Maps -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/svg+xml" href="icon.svg">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="stylesheet" href="style.css">
+
+  <script>
+    // Register PWA Service Worker for Offline Play
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+          .then(reg => console.log('Service Worker registered successfully!', reg.scope))
+          .catch(err => console.log('Service Worker registration failed:', err));
+      });
+    }
+  </script>
+</head>
+<body>
+
+  <!-- Leaflet Map Container -->
+  <div id="map"></div>
+
+  <!-- Splash Screen / Main Menu -->
+  <div id="splash-screen">
+    <h1 class="splash-title">Map Explorer 🌍🚗</h1>
+    <p style="font-size: 1.3rem; color: #0369a1; font-weight: 600; margin-bottom: 1.5rem; text-align: center; max-width: 500px; padding: 0 20px;">
+      Explore the real world! Route to any address, trigger auto-pilot to watch your car drive the map, collect Scripture scrolls, and unlock cool upgrades!
+    </p>
+    
+    <!-- Presets and Destination Pickers -->
+    <div class="preset-card">
+      <h3 style="color: #0284c7; margin-bottom: 10px; font-size: 1.1rem; text-align: center;">🗺 Choose Your Starting Level Tour</h3>
+      <select id="tour-select" class="nav-select">
+        <option value="1">Floor 1: Paris Cruise (Arc de Triomphe ➔ Eiffel Tower)</option>
+        <option value="2">Floor 2: San Francisco Gate (Vista Point ➔ Presidio)</option>
+        <option value="3">Floor 3: Tokyo Neon (Tokyo Tower ➔ Shibuya Crossing)</option>
+        <option value="4">Floor 4: Rome Ancient (Colosseum ➔ Vatican City)</option>
+        <option value="5">Floor 5: Sydney Coast (Botanic Garden ➔ Harbour Bridge)</option>
+        <option value="6">Floor 6: London Royal (Buckingham Palace ➔ Tower Bridge)</option>
+        <option value="7">Floor 7: New York Night (Times Square ➔ Met Museum)</option>
+        <option value="8">Floor 8: Cairo Sphinx (Giza Sphinx ➔ Great Pyramid)</option>
+        <option value="9">Floor 9: Rio Heights (Copacabana Beach ➔ Christ Lookout)</option>
+        <option value="10">Floor 10: Jerusalem Garden (Mount of Olives ➔ Gethsemane)</option>
+        <option value="11">Floor 11: Intramuros Manila Cruise (Fort Santiago ➔ Rizal Park) 🇵🇭</option>
+        <option value="12">Floor 12: Auckland Sky Cruise (Harbour Bridge ➔ Sky Tower) 🇳🇿</option>
+        <option value="13">Floor 13: Free Exploration (Exploratory Mode) 🧭</option>
+      </select>
+      
+      <div style="text-align: center; margin: 12px 0; font-weight: bold; color: #64748b;">— OR —</div>
+      
+      <button class="surprise-btn" id="surprise-btn">🎲 Surprise Me With a Landmark!</button>
+    </div>
+
+    <button class="play-btn" id="start-btn" style="margin-top: 1.5rem;">Let's Drive!</button>
+  </div>
+
+  <!-- GPS Control Panel Dashboard overlay (Glassmorphism) -->
+  <div id="gps-dashboard">
+    <div class="gps-header">
+      <span class="gps-logo">🗺 GPS Navigation</span>
+      <button class="dashboard-close-btn" id="dashboard-toggle-btn">▼ Hide Panel</button>
+    </div>
+    
+    <div class="gps-body" id="gps-body-content">
+      <div class="search-input-group">
+        <label>📍 Start Address</label>
+        <div style="display: flex; gap: 6px;">
+          <input type="text" id="start-search-input" placeholder="Type starting location (e.g. Paris)" value="Arc de Triomphe, Paris">
+          <button class="search-btn" id="start-search-btn">🔍</button>
+        </div>
+      </div>
+
+      <div class="search-input-group" style="margin-top: 8px;">
+        <label>🏁 Destination Address</label>
+        <div style="display: flex; gap: 6px;">
+          <input type="text" id="end-search-input" placeholder="Type destination (e.g. Eiffel Tower)" value="Eiffel Tower, Paris">
+          <button class="search-btn" id="end-search-btn">🔍</button>
+        </div>
+      </div>
+
+      <button class="route-calculate-btn" id="calculate-route-btn">🗺 Generate Route</button>
+
+      <!-- Auto Pilot and Simulation Controls -->
+      <div class="sim-controls-card">
+        <div class="control-row">
+          <span class="control-label">🤖 Auto-Pilot Drive</span>
+          <label class="switch">
+            <input type="checkbox" id="autopilot-toggle" checked>
+            <span class="slider round"></span>
+          </label>
+        </div>
+        
+        <div class="control-row" style="margin-top: 10px; display: flex; flex-direction: column; gap: 6px;">
+          <div style="display: flex; justify-content: space-between; width: 100%; align-items: center;">
+            <span class="control-label">⚡ Drive Speed</span>
+            <input type="range" id="speed-range" min="1" max="100" value="5" class="speed-slider">
+          </div>
+          <div style="display: flex; justify-content: flex-end; gap: 8px; width: 100%; margin-top: 2px;">
+            <button id="speed-x2-btn" class="speed-quick-btn">⚡ 2x Speed</button>
+            <button id="speed-x5-btn" class="speed-quick-btn">⚡ 5x Speed</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Heads Up Display Overlay -->
+  <div id="hud">
+    <div class="hud-top-bar">
+      <div class="hud-left-group">
+        <!-- Floor Progress HUD -->
+        <div class="hud-panel" id="floor-hud">
+          <div class="hud-text" id="floor-count">Floor 1/10</div>
+        </div>
+
+        <!-- Stars HUD -->
+        <div class="hud-panel" id="stars-hud">
+          <div class="star-icon">⭐</div>
+          <div class="hud-text" id="star-count">0</div>
+        </div>
+      </div>
+
+      <!-- Navigation Text Cues (turn-by-turn simulation description) -->
+      <div class="hud-panel" id="gps-instructions-hud" style="flex-grow: 1; margin: 0 15px; text-align: center; max-width: 500px; justify-content: center; background: radial-gradient(circle at 10% 20%, #eff6ff 0%, #dbeafe 100%); border-color: #3b82f6;">
+        <div class="hud-text" id="gps-instruction-text" style="font-size: 1.15rem; color: #1e3a8a;">Generating route directions...</div>
+      </div>
+
+      <div class="hud-right-group">
+        <button id="mute-btn">🎵 Music: ON</button>
+        <button id="garage-btn">🔧 Garage</button>
+        
+        <!-- Active Quest Indicator -->
+        <div class="hud-panel" id="quest-hud">
+          <div class="hud-text" id="quest-text">Collect Scripture Scroll!</div>
+          <div class="quest-icon" id="quest-icon-box">📜</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Virtual Joystick for Manual Driving -->
+    <div id="joystick-container">
+      <div id="joystick-knob"></div>
+    </div>
+
+    <!-- Honk Button -->
+    <button id="honk-btn">HONK! 📣</button>
+
+    <!-- Camera / View Controls -->
+    <div id="camera-controls-container">
+      <button id="camera-lock-btn" class="hud-panel-btn active" title="Lock camera to car">🔒 Lock Cam</button>
+      <button id="camera-snap-btn" class="hud-panel-btn" title="Center camera on car">🎯 Snap to Car</button>
+    </div>
+  </div>
+
+  <!-- NPC Speech Dialogue Card -->
+  <div id="dialog-overlay">
+    <canvas id="npc-avatar-canvas" class="npc-avatar" width="90" height="90"></canvas>
+    <div class="npc-content">
+      <div class="npc-name" id="npc-title">Mayor Teddy</div>
+      <div class="npc-text" id="npc-speech">Welcome to our trip! Let's follow the routing directions to collect the Scripture Scroll!</div>
+    </div>
+  </div>
+
+  <!-- Educational / Scripture Puzzle Modal -->
+  <div id="puzzle-overlay">
+    <div class="puzzle-card">
+      <button class="popup-close-btn" id="puzzle-close-btn">&times;</button>
+      <h2 class="puzzle-title" id="puzzle-header">Bible Scripture Quest!</h2>
+      <p class="puzzle-prompt" id="puzzle-body">Fill in the blank of the scripture you found!</p>
+      
+      <!-- Option selection containers (dynamically rendered) -->
+      <div class="puzzle-options" id="puzzle-choices"></div>
+      
+      <button class="puzzle-close-btn" id="puzzle-close">Close</button>
+    </div>
+  </div>
+
+  <!-- Scripture Scroll Card Popup -->
+  <div id="scripture-card-overlay" class="screen-overlay">
+    <div class="scripture-card animate-pop">
+      <button class="popup-close-btn" id="scripture-close-btn">&times;</button>
+      <div class="scroll-icon-top">📜✨</div>
+      <h2 class="scripture-card-title">You Found a Scripture Scroll!</h2>
+      <div class="scripture-quote-box">
+        <p class="scripture-verse" id="scripture-text">"God is love."</p>
+        <p class="scripture-citation" id="scripture-citation">— 1 John 4:8 (NKJV)</p>
+      </div>
+      <p class="scripture-tip">Remember this verse to help complete the quest!</p>
+      <button class="big-green-btn" id="scripture-card-ok">I Memorized It!</button>
+    </div>
+  </div>
+
+  <!-- Floor transition / Level Up Modal -->
+  <div id="level-clear-overlay" class="screen-overlay">
+    <div class="clear-card animate-pop">
+      <button class="popup-close-btn" id="level-clear-close-btn">&times;</button>
+      <h1 class="clear-title">🎉 TOUR FLOOR CLEARED! 🎉</h1>
+      <p class="clear-subtitle" id="clear-floor-num">You completed Floor 1!</p>
+      
+      <div class="reward-box">
+        <p class="reward-title">🎁 SCRIPTURE REWARD UNLOCKED! 🎁</p>
+        <div class="reward-graphic" id="reward-item-icon">🐰</div>
+        <p class="reward-name" id="reward-item-name">Cute Bunny Ears (Decal)</p>
+      </div>
+
+      <button class="big-green-btn" id="next-floor-btn">Travel to Next Landmark! ➔</button>
+    </div>
+  </div>
+
+  <!-- Customisation Garage screen modal -->
+  <div id="garage-overlay" class="screen-overlay">
+    <div class="garage-card animate-pop">
+      <button class="popup-close-btn" id="garage-close-btn-top">&times;</button>
+      <h1 class="garage-title">🔧 Car Customisation Garage 🏎</h1>
+      <p style="margin-bottom: 20px; font-weight:600; color: #475569;">Unlock items by collecting Scripture Scrolls on higher floors!</p>
+      
+      <div class="garage-section">
+        <h3>🎨 Select Car Color</h3>
+        <div class="garage-grid" id="paint-choices">
+          <!-- Paint swatches populated dynamically -->
+        </div>
+      </div>
+
+      <div class="garage-section">
+        <h3>🎀 Select Car Roof Accessories</h3>
+        <div class="garage-grid" id="accessory-choices">
+          <!-- Decal selectors populated dynamically -->
+        </div>
+      </div>
+
+      <button class="big-red-btn" id="close-garage-btn">Back to Map ➔</button>
+    </div>
+  </div>
+
+  <!-- Floor Selection Modal Overlay -->
+  <div id="floor-select-overlay" class="screen-overlay">
+    <div class="garage-card animate-pop" style="max-width: 500px;">
+      <button class="popup-close-btn" id="floor-select-close-btn-top">&times;</button>
+      <h1 class="garage-title" style="background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);">🗺 Jump to Floor Tour ➔</h1>
+      <p style="margin-bottom: 20px; font-weight:600; color: #475569; text-align: center;">Select any floor landmark tour to jump directly to it!</p>
+      
+      <div class="garage-section" style="max-height: 55vh; overflow-y: auto; padding: 5px;">
+        <div style="display: flex; flex-direction: column; gap: 10px;" id="floor-selection-list">
+          <!-- Floor items will be dynamically generated in JS -->
+        </div>
+      </div>
+      
+      <button class="big-red-btn" id="close-floor-select-btn" style="margin-top: 15px;">Back to Map ➔</button>
+    </div>
+  </div>
+
+  <!-- Game Win Screen -->
+  <div id="victory-overlay" class="screen-overlay">
+    <div class="victory-card animate-pop">
+      <button class="popup-close-btn" id="victory-close-btn">&times;</button>
+      <h1 class="victory-title">👑 SUPER EXPLORER VICTORY! 👑</h1>
+      <p class="victory-text">Wow! You completed all 12 Floors and memorized 12 Bible Scriptures across the globe!</p>
+      <div style="font-size: 4.5rem; margin: 20px 0;">🏆🌍🏎🌍🏆</div>
+      <button class="play-btn" onclick="location.reload()">Explore Again! 🔄</button>
+    </div>
+  </div>
+
+  <!-- Leaflet JS Library -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+  <!-- Scripts -->
+  <script src="assets.js"></script>
+  <script src="puzzles.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
