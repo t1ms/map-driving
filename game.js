@@ -114,6 +114,11 @@ window.addEventListener('load', () => {
   let routePoints = []; // List of L.LatLng
   let currentTargetIndex = 0;
   
+  // Navigation Banner State
+  let routeSteps = [];
+  let activeStepIndex = 0;
+  let isPreviewMode = false;
+  
   // Custom marker canvas references
   let carCanvasCtx = null;
   let teddyCanvasCtx = null;
@@ -128,8 +133,11 @@ window.addEventListener('load', () => {
     isHonking: false,
     honkTimer: 0,
     speedFactor: 5,
-    isAutopilot: true
+    isAutopilot: false
   };
+  
+  // Drive-to-step: when user swipes banner, car drives to that step then stops
+  let driveToStepIndex = -1; // -1 means no active drive-to target
 
   // Keyboard controls
   const keys = {
@@ -279,16 +287,59 @@ window.addEventListener('load', () => {
   }
 
   // --- OSRM ROUTE GENERATOR ---
+  function mapManeuverIcon(type, modifier) {
+    if (type === 'arrive') return '🏁';
+    if (type === 'depart') return '🚀';
+    if (type === 'roundabout') return '↻';
+    if (type === 'merge') return '⇢';
+    
+    if (modifier === 'left') return '↰';
+    if (modifier === 'right') return '↱';
+    if (modifier === 'slight left') return '↖';
+    if (modifier === 'slight right') return '↗';
+    if (modifier === 'sharp left') return '⤹';
+    if (modifier === 'sharp right') return '⤸';
+    
+    if (type === 'continue' || modifier === 'straight') return '↑';
+    return '➤';
+  }
+
   async function generateRoute(startCoords, endCoords) {
     try {
       updateInstructionText("🛰 GPS: Querying routing network coordinates...");
-      const url = `https://router.project-osrm.org/route/v1/driving/${startCoords[1]},${startCoords[0]};${endCoords[1]},${endCoords[0]}?overview=full&geometries=geojson`;
+      const url = `https://router.project-osrm.org/route/v1/driving/${startCoords[1]},${startCoords[0]};${endCoords[1]},${endCoords[0]}?overview=full&geometries=geojson&steps=true`;
       const res = await fetch(url);
       const data = await res.json();
       
       if (data && data.routes && data.routes.length > 0) {
         const coords = data.routes[0].geometry.coordinates;
         routePoints = coords.map(c => L.latLng(c[1], c[0]));
+        
+        if (data.routes[0].legs && data.routes[0].legs.length > 0) {
+          const steps = data.routes[0].legs[0].steps;
+          routeSteps = steps.map(step => {
+            const maneuver = step.maneuver;
+            let icon = mapManeuverIcon(maneuver.type, maneuver.modifier);
+            let instruction = maneuver.type;
+            if (step.name) {
+              instruction += " onto " + step.name;
+            } else if (maneuver.type === "arrive") {
+              instruction = "Arrive at destination";
+            }
+            return {
+              instruction: instruction.charAt(0).toUpperCase() + instruction.slice(1),
+              maneuverType: maneuver.type,
+              modifier: maneuver.modifier,
+              distance: step.distance,
+              duration: step.duration,
+              location: [maneuver.location[1], maneuver.location[0]], // [lat, lng]
+              icon: icon
+            };
+          });
+        } else {
+          routeSteps = [];
+        }
+        
         drawRouteOnMap();
         return true;
       }
@@ -298,6 +349,7 @@ window.addEventListener('load', () => {
     
     // Offline fallback: straight interpolation
     routePoints = [];
+    routeSteps = [];
     const steps = 80;
     for (let i = 0; i <= steps; i++) {
       const t = i / steps;
@@ -351,12 +403,238 @@ window.addEventListener('load', () => {
     carMarker.setLatLng([car.lat, car.lng]);
     map.setView([car.lat, car.lng], 16, { animate: false });
     
-    // Re-enable autopilot for the new route
-    car.isAutopilot = true;
-    document.getElementById("autopilot-toggle").checked = true;
+    // Keep autopilot in its current user-chosen state
+    document.getElementById("autopilot-toggle").checked = car.isAutopilot;
+    driveToStepIndex = -1;
     
-    updateInstructionText("🛰 GPS Route Ready! Auto-Pilot is driving. Use joystick to steer manually.");
+    updateInstructionText(car.isAutopilot
+      ? "🛰 GPS Route Ready! Auto-Pilot is driving. Use joystick to steer manually."
+      : "🛰 GPS Route Ready! Swipe the nav banner to drive to a turn, or enable Auto-Pilot.");
+    
+    if (routeSteps.length > 0) {
+      renderNavBanner(routeSteps);
+    } else {
+      hideNavBanner();
+    }
   }
+
+  // --- NAVIGATION BANNER MANAGEMENT ---
+  function renderNavBanner(steps) {
+    const track = document.getElementById('nav-banner-track');
+    const banner = document.getElementById('nav-banner');
+    const hudInstructions = document.getElementById('gps-instructions-hud');
+    
+    track.innerHTML = '';
+    activeStepIndex = 0;
+    isPreviewMode = false;
+    
+    steps.forEach((step, index) => {
+      const card = document.createElement('div');
+      card.className = 'nav-card';
+      card.dataset.stepIndex = index;
+      if (index === 0) card.classList.add('active');
+      
+      let distanceText = step.distance > 1000 
+        ? (step.distance / 1000).toFixed(1) + ' km'
+        : Math.round(step.distance) + ' m';
+        
+      if (step.distance === 0) distanceText = '';
+      
+      card.innerHTML = `
+        <div class="nav-card-icon">${step.icon}</div>
+        <div class="nav-card-details">
+          <div class="nav-card-street">${step.instruction}</div>
+          <div class="nav-card-distance">${distanceText}</div>
+        </div>
+        <div class="nav-card-counter">${index + 1} / ${steps.length}</div>
+      `;
+      track.appendChild(card);
+    });
+    
+    banner.style.display = 'flex';
+    hudInstructions.style.display = 'none';
+    document.getElementById('nav-recenter-btn').style.display = 'none';
+    
+    // Add scroll event listener
+    track.addEventListener('scroll', onBannerScroll);
+    initBannerDrag(track);
+  }
+
+  // Mouse drag-to-scroll state
+  let isDraggingBanner = false;
+  let bannerStartX = 0;
+  let bannerScrollLeft = 0;
+
+  function initBannerDrag(track) {
+    track.onmousedown = (e) => {
+      isDraggingBanner = true;
+      track.style.scrollSnapType = 'none'; // Temporarily disable snap during drag
+      track.style.cursor = 'grabbing';
+      bannerStartX = e.pageX - track.offsetLeft;
+      bannerScrollLeft = track.scrollLeft;
+    };
+    
+    track.onmouseleave = () => {
+      if (isDraggingBanner) {
+        isDraggingBanner = false;
+        track.style.scrollSnapType = 'x mandatory';
+        track.style.cursor = 'default';
+        onBannerScroll();
+      }
+    };
+    
+    track.onmouseup = () => {
+      isDraggingBanner = false;
+      track.style.scrollSnapType = 'x mandatory';
+      track.style.cursor = 'default';
+      onBannerScroll();
+    };
+    
+    track.onmousemove = (e) => {
+      if (!isDraggingBanner) return;
+      e.preventDefault();
+      const x = e.pageX - track.offsetLeft;
+      const walk = (x - bannerStartX) * 1.5; // Drag speed multiplier
+      track.scrollLeft = bannerScrollLeft - walk;
+    };
+  }
+
+  function hideNavBanner() {
+    const banner = document.getElementById('nav-banner');
+    const hudInstructions = document.getElementById('gps-instructions-hud');
+    
+    banner.style.display = 'none';
+    hudInstructions.style.display = 'flex';
+    
+    const track = document.getElementById('nav-banner-track');
+    track.removeEventListener('scroll', onBannerScroll);
+  }
+
+  function scrollToStep(index) {
+    const track = document.getElementById('nav-banner-track');
+    const cards = track.querySelectorAll('.nav-card');
+    if (cards[index]) {
+      // Temporarily disable scroll listener to prevent it from triggering preview mode
+      track.removeEventListener('scroll', onBannerScroll);
+      
+      cards.forEach(c => c.classList.remove('active'));
+      cards[index].classList.add('active');
+      
+      // Calculate scroll position to center the card
+      const trackWidth = track.clientWidth;
+      const cardLeft = cards[index].offsetLeft;
+      const cardWidth = cards[index].offsetWidth;
+      track.scrollTo({
+        left: cardLeft - (trackWidth / 2) + (cardWidth / 2),
+        behavior: 'smooth'
+      });
+      
+      // Re-enable after smooth scroll
+      setTimeout(() => {
+        track.addEventListener('scroll', onBannerScroll);
+      }, 300);
+    }
+  }
+
+  let scrollTimeout = null;
+  function onBannerScroll() {
+    if (scrollTimeout) clearTimeout(scrollTimeout);
+    
+    scrollTimeout = setTimeout(() => {
+      const track = document.getElementById('nav-banner-track');
+      const cards = track.querySelectorAll('.nav-card');
+      const trackCenter = track.scrollLeft + (track.clientWidth / 2);
+      
+      let closestIndex = 0;
+      let minDistance = Infinity;
+      
+      cards.forEach((card, index) => {
+        const cardCenter = card.offsetLeft + (card.offsetWidth / 2);
+        const dist = Math.abs(cardCenter - trackCenter);
+        if (dist < minDistance) {
+          minDistance = dist;
+          closestIndex = index;
+        }
+      });
+      
+      cards.forEach(c => c.classList.remove('active'));
+      cards[closestIndex].classList.add('active');
+      
+      if (closestIndex !== activeStepIndex && closestIndex > activeStepIndex) {
+        // User swiped forward — drive the car to this step at current speed
+        driveToStepIndex = closestIndex;
+        isPreviewMode = false;
+        
+        // Enable autopilot to drive there
+        car.isAutopilot = true;
+        document.getElementById('autopilot-toggle').checked = true;
+        
+        // Keep camera locked on the car while it drives
+        isCameraLocked = true;
+        document.getElementById('camera-lock-btn').classList.add('active');
+        document.getElementById('camera-snap-btn').classList.remove('active');
+        
+        updateInstructionText(`🚗 Driving to step ${closestIndex + 1}...`);
+      } else if (closestIndex < activeStepIndex) {
+        // User swiped backward — just preview (can't drive backwards)
+        isPreviewMode = true;
+        document.getElementById('nav-recenter-btn').style.display = 'block';
+        
+        const step = routeSteps[closestIndex];
+        if (step && step.location) {
+          map.flyTo(step.location, 17, { animate: true, duration: 1.5 });
+          isCameraLocked = false;
+          document.getElementById('camera-lock-btn').classList.remove('active');
+          document.getElementById('camera-snap-btn').classList.add('active');
+        }
+      }
+    }, 150); // Debounce to wait for scroll snap to finish
+  }
+
+  function syncStepWithCarPosition() {
+    if (routeSteps.length === 0 || isPreviewMode) return;
+    
+    // Find which step we are currently heading towards
+    let nextStepIndex = activeStepIndex;
+    
+    // Check if we passed the active step
+    if (activeStepIndex < routeSteps.length - 1) {
+      const currentStep = routeSteps[activeStepIndex];
+      const distToCurrentStep = getDistance(car.lat, car.lng, currentStep.location[0], currentStep.location[1]);
+      
+      // If we are very close to or have passed the current step coordinate, advance
+      if (distToCurrentStep < 15) {
+        nextStepIndex = activeStepIndex + 1;
+      }
+    }
+    
+    if (nextStepIndex !== activeStepIndex) {
+      activeStepIndex = nextStepIndex;
+      scrollToStep(activeStepIndex);
+      
+      // If we've reached the drive-to target step, stop autopilot
+      if (driveToStepIndex >= 0 && activeStepIndex >= driveToStepIndex) {
+        driveToStepIndex = -1;
+        car.isAutopilot = false;
+        document.getElementById('autopilot-toggle').checked = false;
+        updateInstructionText('🛰 Arrived at step! Swipe the banner to drive to the next turn.');
+      }
+    }
+  }
+
+  // Add event listener for recenter button
+  document.getElementById('nav-recenter-btn').addEventListener('click', () => {
+    isPreviewMode = false;
+    driveToStepIndex = -1;
+    document.getElementById('nav-recenter-btn').style.display = 'none';
+    scrollToStep(activeStepIndex);
+    
+    isCameraLocked = true;
+    document.getElementById('camera-lock-btn').classList.add('active');
+    document.getElementById('camera-snap-btn').classList.remove('active');
+    
+    map.flyTo([car.lat, car.lng], 16, { animate: true, duration: 1 });
+  });
 
   // --- GAME LOGIC LOOP ---
   function update(dt) {
@@ -446,6 +724,9 @@ window.addEventListener('load', () => {
       }
       currentTargetIndex = Math.min(bestIdx + 1, routePoints.length - 1);
     }
+    
+    // Sync the turn-by-turn banner with current location
+    syncStepWithCarPosition();
 
     // Smooth angle interpolation (avoid jerky rotation)
     car.angle = lerpAngle(car.angle, car.targetAngle, Math.min(1, 8 * dt / 1000));

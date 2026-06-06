@@ -102,7 +102,7 @@
         <div class="control-row">
           <span class="control-label">🤖 Auto-Pilot Drive</span>
           <label class="switch">
-            <input type="checkbox" id="autopilot-toggle" checked>
+            <input type="checkbox" id="autopilot-toggle">
             <span class="slider round"></span>
           </label>
         </div>
@@ -152,6 +152,14 @@
           <div class="hud-text" id="quest-text">Collect Scripture Scroll!</div>
           <div class="quest-icon" id="quest-icon-box">📜</div>
         </div>
+      </div>
+    </div>
+
+    <!-- Turn-by-Turn Navigation Banner -->
+    <div id="nav-banner" style="display: none;">
+      <button id="nav-recenter-btn">📍 Recenter</button>
+      <div id="nav-banner-track">
+        <!-- Dynamically injected nav-cards -->
       </div>
     </div>
 
